@@ -1,0 +1,29 @@
+[project]
+name = "boblib"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "dodslaser", email = "2969909+dodslaser@users.noreply.github.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "attrs>=23.1.0",
+    "boto3>=1.43.94",
+    "botocore>=1.43.94",
+    "thicks",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+thicks = { git = "https://github.com/ClinicalGenomicsGBG/thicks" }
+
+[dependency-groups]
+dev = [
+    "mypy-boto3-s3>=1.43.93",
+    "ruff>=0.16.7",
+    "ty>=0.0.81",
+]
