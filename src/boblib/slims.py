@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import cache
 from typing import cast
 
@@ -534,7 +534,7 @@ def get_protocol_runs_for_test_in_workflow(
         list[ProtocolRunRecord]: A list of protocol run records for the specified test in the workflow.
     """
     test_templates = get_protocol_templates_for_test(slims, test_pk)
-    max_date = int((datetime.now(UTC) - max_age).timestamp() * 1e3)
+    max_date = int((datetime.now(timezone.utc) - max_age).timestamp() * 1e3)
     criteria = (
         equals("xprn_fk_workflow", workflow_pk)
         & is_one_of("xprn_fk_experimentTemplate", test_templates)

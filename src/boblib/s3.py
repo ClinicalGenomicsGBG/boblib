@@ -12,6 +12,8 @@ from botocore.client import Config as BotocoreClientConfig
 from botocore.exceptions import ClientError
 from urllib3.exceptions import InsecureRequestWarning
 
+from boblib.util import filter_warnings
+
 if TYPE_CHECKING:
     from mypy_boto3_s3.client import S3Client
 
@@ -107,7 +109,7 @@ class S3Manager:
             raise FileExistsError(f"Destination path '{dst}' already exists.")
         s3 = _get_s3_client(self.credentials[endpoint])
         dst.parent.mkdir(parents=True, exist_ok=True)
-        with warnings.catch_warnings(action="ignore", category=InsecureRequestWarning):
+        with filter_warnings(action="ignore", category=InsecureRequestWarning):
             s3.download_file(bucket, key, str(dst))
         return dst
 
@@ -117,13 +119,13 @@ class S3Manager:
         if self.exists(endpoint, bucket, key):
             raise FileExistsError(f"Remote file '{key}' already exists in bucket '{bucket}'.")
         s3 = _get_s3_client(self.credentials[endpoint])
-        with warnings.catch_warnings(action="ignore", category=InsecureRequestWarning):
+        with filter_warnings(action="ignore", category=InsecureRequestWarning):
             s3.upload_file(Filename=str(src), Bucket=bucket, Key=key, ExtraArgs={"ChecksumAlgorithm": "SHA256"})
 
     def exists(self, endpoint: str, bucket: str, key: str) -> bool:
         s3 = _get_s3_client(self.credentials[endpoint])
         try:
-            with warnings.catch_warnings(action="ignore", category=InsecureRequestWarning):
+            with filter_warnings(action="ignore", category=InsecureRequestWarning):
                 s3.head_object(Bucket=bucket, Key=key)
             return True
         except ClientError as exc:
