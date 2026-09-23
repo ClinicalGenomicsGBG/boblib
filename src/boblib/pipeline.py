@@ -78,7 +78,7 @@ class FileLocation:
         elif not dst.is_dir():
             raise ValueError(f"Destination path '{dst}' exists and is not a directory.")
         local_path = dst / self.remote.key
-        s3.fetch(self.remote, local_path)
+        s3.fetch(self.remote.endpoint, self.remote.bucket, self.remote.key, local_path)
         self.local = local_path
 
 

@@ -12,8 +12,6 @@ from botocore.client import Config as BotocoreClientConfig
 from botocore.exceptions import ClientError
 from urllib3.exceptions import InsecureRequestWarning
 
-from boblib.pipeline import RemoteFileLocation
-
 if TYPE_CHECKING:
     from mypy_boto3_s3.client import S3Client
 
@@ -102,32 +100,31 @@ class S3Credentials(dict[str, S3Credential]):
 class S3Manager:
     credentials: S3Credentials = field(converter=S3Credentials._convert)
 
-    def fetch(self, remote: RemoteFileLocation, dst: Path) -> Path:
+    def fetch(self, endpoint: str, bucket: str, key: str, dst: Path) -> Path:
         if dst.is_dir():
-            dst = dst / remote.key.split("/")[-1]
+            dst = dst / key.split("/")[-1]
         if dst.exists():
             raise FileExistsError(f"Destination path '{dst}' already exists.")
-        s3 = _get_s3_client(self.credentials[remote.endpoint])
+        s3 = _get_s3_client(self.credentials[endpoint])
         dst.parent.mkdir(parents=True, exist_ok=True)
         with warnings.catch_warnings(action="ignore", category=InsecureRequestWarning):
-            s3.download_file(remote.bucket, remote.key, str(dst))
+            s3.download_file(bucket, key, str(dst))
         return dst
 
-    def upload(self, remote: RemoteFileLocation, src: Path) -> RemoteFileLocation:
+    def upload(self, endpoint: str, bucket: str, key: str, src: Path):
         if src.is_dir():
             raise IsADirectoryError(f"Source path '{src}' is a directory, expected a file.")
-        if self.exists(remote):
-            raise FileExistsError(f"Remote file '{remote.key}' already exists in bucket '{remote.bucket}'.")
-        s3 = _get_s3_client(self.credentials[remote.endpoint])
+        if self.exists(endpoint, bucket, key):
+            raise FileExistsError(f"Remote file '{key}' already exists in bucket '{bucket}'.")
+        s3 = _get_s3_client(self.credentials[endpoint])
         with warnings.catch_warnings(action="ignore", category=InsecureRequestWarning):
-            s3.upload_file(Filename=str(src), Bucket=remote.bucket, Key=remote.key, ExtraArgs={"ChecksumAlgorithm": "SHA256"})
-        return remote
+            s3.upload_file(Filename=str(src), Bucket=bucket, Key=key, ExtraArgs={"ChecksumAlgorithm": "SHA256"})
 
-    def exists(self, remote: RemoteFileLocation) -> bool:
-        s3 = _get_s3_client(self.credentials[remote.endpoint])
+    def exists(self, endpoint: str, bucket: str, key: str) -> bool:
+        s3 = _get_s3_client(self.credentials[endpoint])
         try:
             with warnings.catch_warnings(action="ignore", category=InsecureRequestWarning):
-                s3.head_object(Bucket=remote.bucket, Key=remote.key)
+                s3.head_object(Bucket=bucket, Key=key)
             return True
         except ClientError as exc:
             if exc.response["ResponseMetadata"]["HTTPStatusCode"] == 404:
