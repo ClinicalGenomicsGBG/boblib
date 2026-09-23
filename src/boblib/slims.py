@@ -521,6 +521,7 @@ def get_protocol_runs_for_test_in_workflow(
     test_pk: int,
     max_age: timedelta,
     cancelled: bool = False,
+    completed: bool = False,
 ) -> list[ProtocolRunRecord]:
     """List all protocol runs for a specific test in a workflow.
 
@@ -541,6 +542,8 @@ def get_protocol_runs_for_test_in_workflow(
     )
     if not cancelled:
         criteria &= ~equals("xprn_cancelled", True)
+    if not completed:
+        criteria &= ~equals("xprn_completed", True)
     records = slims.fetch(
         "ExperimentRun",
         sort=["xprn_createdOn"],
