@@ -2,21 +2,26 @@ from __future__ import annotations
 
 import json
 from datetime import timedelta
-from enum import StrEnum
 from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Generic, TypeVar, cast
 from warnings import warn
 
 from attrs import define, field
-from thicks.internal import Column, Record
 from thicks.slims import Slims
 
+from boblib.record import (
+    RECORD,
+    STATUS,
+    ProtocolRunRecord,
+    ResultRecord,
+    TypedColumn,
+)
 from boblib.slims import (
     get_protocol_runs_for_test_in_workflow,
     get_results_by_protocol_run,
     get_status_by_pk,
-    get_status_by_uid,
+    get_status_by_table_and_id,
     get_test_by_name,
     get_workflow_by_uid,
 )
@@ -25,21 +30,6 @@ if TYPE_CHECKING:
     from boblib.s3 import S3Manager
 
 T = TypeVar("T")
-RECORD = TypeVar("RECORD", bound=Record)
-
-
-class STATUS(StrEnum):
-    PENDING = "stts_rslt_pending"
-    AVAILABLE = "stts_rslt_available"
-    VERIFIED = "stts_rslt_verified"
-    VALIDATED = "stts_rslt_validated"
-    CANCELLED = "stts_rslt_cancelled"
-    REJECTED = "stts_rslt_rejected"
-
-
-class TypedColumn(Column, Generic[T]):
-    value: T
-    displayValue: str | None
 
 
 def _convert_remote_location(value: dict | None) -> RemoteFileLocation | None:
@@ -58,24 +48,8 @@ def _convert_remote_location(value: dict | None) -> RemoteFileLocation | None:
         key=key,
     )
 
-
-class _PipelineProtocolRunRecord(Record):
-    xprn_name: TypedColumn[str]
-    xprn_cancelled: TypedColumn[bool]
-    xprn_completed: TypedColumn[bool]
-
-
-class _PipelineMetadataRecord(Record):
-    test_name: TypedColumn[str]
-    rslt_fk_content: TypedColumn[int]
-    rslt_value: TypedColumn[str]
+class _PipelineMetadataRecord(ResultRecord):
     rslt_cf_fileLocations: TypedColumn[str | None]
-    rslt_fk_status: TypedColumn[int]
-
-class _PipelineStatusRecord(Record):
-    stts_uniqueIdentifier: TypedColumn[str]
-    stts_pk: TypedColumn[int]
-
 
 @define(slots=False, kw_only=True)
 class RemoteFileLocation:
@@ -133,12 +107,12 @@ class PipelineMetadata(PipelineBase[_PipelineMetadataRecord]):
     @property
     def status(self) -> STATUS:
         status = get_status_by_pk(self._slims, self.record.rslt_fk_status.value)
-        return STATUS(cast(_PipelineStatusRecord, status).stts_uniqueIdentifier.value)
+        return status.stts_id.value
 
     @status.setter
     def status(self, value: STATUS) -> None:
-        new_status = get_status_by_uid(self._slims, value.value)
-        self.record.update({"rslt_fk_status": cast(_PipelineStatusRecord, new_status).stts_pk.value})
+        new_status = get_status_by_table_and_id(self._slims, "Result", value)
+        self.record.update({"rslt_fk_status": new_status.pk()})
 
     @cached_property
     def test_name(self) -> str | None:
@@ -170,7 +144,7 @@ class PipelineMetadata(PipelineBase[_PipelineMetadataRecord]):
 
 
 @define(slots=False)
-class PipelineProtocolRun(PipelineBase[_PipelineProtocolRunRecord]):
+class PipelineProtocolRun(PipelineBase[ProtocolRunRecord]):
     test: str | None = None
 
     @property
@@ -221,4 +195,4 @@ def get_pipeline_protocol_runs(
         test_pk=test.pk(),
         max_age=max_age,
     )
-    return [PipelineProtocolRun(cast(_PipelineProtocolRunRecord, result)) for result in results]
+    return [PipelineProtocolRun(result, test=test_name) for result in results]

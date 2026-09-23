@@ -1,8 +1,11 @@
 from datetime import UTC, datetime, timedelta
 from functools import cache
+from typing import cast
 
 from thicks.criteria import equals, greater_than_or_equal, is_one_of
 from thicks.slims import Record, Slims
+
+from boblib.record import ProtocolRunRecord, ResultRecord, StatusRecord
 
 
 class NoMatch(Exception): ...
@@ -371,35 +374,37 @@ def get_workflow_by_uid(
 
 
 @cache
-def get_status_by_uid(
+def get_status_by_table_and_id(
     slims: Slims,
-    status_uid: str,
-) -> Record:
-    """Retrieve a status record by its UID.
+    table: str,
+    status_id: str,
+) -> StatusRecord:
+    """Retrieve a status record by its ID and table.
 
     Args:
         slims (Slims): An instance of the Slims class to interact with the SLIMS API.
-        status_uid (str): The UID of the status to retrieve.
+        status_id (str): The ID of the status to retrieve.
+        table (str): The table in which to look for the status.
 
     Returns:
-        Record: The status record matching the specified UID.
+        StatusRecord: The status record matching the specified ID and table.
 
     Raises:
-        NoMatch: If no status is found with the specified UID.
-        MultiMatch: If multiple statuses are found with the specified UID.
+        NoMatch: If no status is found with the specified ID and table.
+        MultiMatch: If multiple statuses are found with the specified ID and table.
     """
-    statuses = slims.fetch("Status", equals("stts_uniqueIdentifier", status_uid), start=0, end=2)
+    statuses = slims.fetch(table, equals("stts_uniqueIdentifier", status_id) & equals("dbtb_name", table), start=0, end=2)
     if not statuses:
-        raise NoMatch(f"No Status found with UID '{status_uid}'")
+        raise NoMatch(f"No Status found with ID '{status_id}' in table '{table}'")
     if len(statuses) > 1:
-        raise MultiMatch(f"Multiple Statuses found with UID '{status_uid}'")
-    return statuses[0]
+        raise MultiMatch(f"Multiple Statuses found with ID '{status_id}' in table '{table}'")
+    return cast(StatusRecord, statuses[0])
 
 @cache
 def get_status_by_pk(
     slims: Slims,
     status_pk: int,
-) -> Record:
+) -> StatusRecord:
     """Retrieve a status record by its primary key.
 
     Args:
@@ -407,7 +412,7 @@ def get_status_by_pk(
         status_pk (int): The primary key of the status to retrieve.
 
     Returns:
-        Record: The status record matching the specified primary key.
+        StatusRecord: The status record matching the specified primary key.
 
     Raises:
         NoMatch: If no status is found with the specified primary key.
@@ -415,7 +420,7 @@ def get_status_by_pk(
     status = slims.fetch_by_pk("Status", status_pk)
     if not status:
         raise NoMatch(f"No Status found with PK '{status_pk}'")
-    return status
+    return cast(StatusRecord, status)
 
 def link_content_to_run_step(slims: Slims, content_pk: int, run_step_pk: int):
     """Link a content record to a protocol run step.
@@ -451,7 +456,7 @@ def create_protocol_run_for_test_in_workflow(
         Record: The newly created protocol run record.
     """
     template_pk = get_template_for_test_in_workflow(slims, test_pk, workflow_pk)
-    return slims.add(
+    record = slims.add(
         "ExperimentRun",
         {
             "xprn_usage": "ELN",
@@ -460,6 +465,7 @@ def create_protocol_run_for_test_in_workflow(
             "xprn_fk_experimentTemplate": template_pk,
         },
     )
+    return cast(ProtocolRunRecord, record)
 
 
 def link_content_to_protocol_run(
@@ -484,7 +490,7 @@ def create_test_result_for_content_in_protocol_run(
     test_pk: int,
     content_pk: int,
     **kwargs,
-) -> Record:
+) -> ResultRecord:
     """Create a result for a test in a protocol run, associated with a specific content record.
 
     Args:
@@ -497,7 +503,7 @@ def create_test_result_for_content_in_protocol_run(
         Record: The newly created result record.
     """
     run_step_pk = get_test_run_step(slims, run_pk=run_pk, test_pk=test_pk)
-    return slims.add(
+    record = slims.add(
         "Result",
         {
             "rslt_fk_content": content_pk,
@@ -506,6 +512,7 @@ def create_test_result_for_content_in_protocol_run(
             **kwargs,
         },
     )
+    return cast(ResultRecord, record)
 
 
 def get_protocol_runs_for_test_in_workflow(
@@ -514,7 +521,7 @@ def get_protocol_runs_for_test_in_workflow(
     test_pk: int,
     max_age: timedelta,
     cancelled: bool = False,
-) -> list[Record]:
+) -> list[ProtocolRunRecord]:
     """List all protocol runs for a specific test in a workflow.
 
     Args:
@@ -523,7 +530,7 @@ def get_protocol_runs_for_test_in_workflow(
         test_pk (int): The primary key of the test.
 
     Returns:
-        list[Record]: A list of protocol run records for the specified test in the workflow.
+        list[ProtocolRunRecord]: A list of protocol run records for the specified test in the workflow.
     """
     test_templates = get_protocol_templates_for_test(slims, test_pk)
     max_date = int((datetime.now(UTC) - max_age).timestamp() * 1e3)
@@ -534,8 +541,9 @@ def get_protocol_runs_for_test_in_workflow(
     )
     if not cancelled:
         criteria &= ~equals("xprn_cancelled", True)
-    return slims.fetch(
+    records = slims.fetch(
         "ExperimentRun",
         sort=["xprn_createdOn"],
         criteria=criteria,
     )
+    return cast(list[ProtocolRunRecord], records)
