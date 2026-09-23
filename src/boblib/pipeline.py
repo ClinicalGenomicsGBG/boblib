@@ -68,6 +68,7 @@ class FileLocation:
             raise ValueError("Both local and remote file locations are missing.")
 
     def ensure_local(self, s3: S3Manager, dst: Path) -> None:
+        dst = Path(dst)
         if self.local is not None and self.local.exists():
             return
         if self.remote is None:
