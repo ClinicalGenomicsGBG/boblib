@@ -1,21 +1,21 @@
 from __future__ import annotations
 
 import json
+import warnings
 from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING
-from warnings import warn
 
 import boto3
 from attrs import define, field
 from botocore.client import Config as BotocoreClientConfig
 from botocore.exceptions import ClientError
+from urllib3.exceptions import InsecureRequestWarning
 
 from boblib.pipeline import RemoteFileLocation
 
 if TYPE_CHECKING:
     from mypy_boto3_s3.client import S3Client
-
 
 @cache
 def _get_s3_client(
@@ -66,7 +66,7 @@ class S3Credentials(dict[str, S3Credential]):
             aws_access_key_id = item.pop("aws_access_key_id", None)
             aws_secret_access_key = item.pop("aws_secret_access_key", None)
             for key in item:
-                warn(f"Unexpected key '{key}' in S3 credential item: {item}")
+                warnings.warn(f"Unexpected key '{key}' in S3 credential item: {item}")
             try:
                 credential = S3Credential(
                     endpoint_url=endpoint_url,
@@ -75,7 +75,7 @@ class S3Credentials(dict[str, S3Credential]):
                 )
                 result[endpoint_url] = credential
             except TypeError as exc:
-                warn(f"Failed to create S3Credential for item {item}: {exc}")
+                warnings.warn(f"Failed to create S3Credential for item {item}: {exc}")
                 continue
             else:
                 result[endpoint_url] = credential
@@ -109,7 +109,8 @@ class S3Manager:
             raise FileExistsError(f"Destination path '{dst}' already exists.")
         s3 = _get_s3_client(self.credentials[remote.endpoint])
         dst.parent.mkdir(parents=True, exist_ok=True)
-        s3.download_file(remote.bucket, remote.key, str(dst))
+        with warnings.catch_warnings(action="ignore", category=InsecureRequestWarning):
+            s3.download_file(remote.bucket, remote.key, str(dst))
         return dst
 
     def upload(self, remote: RemoteFileLocation, src: Path) -> RemoteFileLocation:
@@ -118,13 +119,15 @@ class S3Manager:
         if self.exists(remote):
             raise FileExistsError(f"Remote file '{remote.key}' already exists in bucket '{remote.bucket}'.")
         s3 = _get_s3_client(self.credentials[remote.endpoint])
-        s3.upload_file(Filename=str(src), Bucket=remote.bucket, Key=remote.key, ExtraArgs={"ChecksumAlgorithm": "SHA256"})
+        with warnings.catch_warnings(action="ignore", category=InsecureRequestWarning):
+            s3.upload_file(Filename=str(src), Bucket=remote.bucket, Key=remote.key, ExtraArgs={"ChecksumAlgorithm": "SHA256"})
         return remote
 
     def exists(self, remote: RemoteFileLocation) -> bool:
         s3 = _get_s3_client(self.credentials[remote.endpoint])
         try:
-            s3.head_object(Bucket=remote.bucket, Key=remote.key)
+            with warnings.catch_warnings(action="ignore", category=InsecureRequestWarning):
+                s3.head_object(Bucket=remote.bucket, Key=remote.key)
             return True
         except ClientError as exc:
             if exc.response["ResponseMetadata"]["HTTPStatusCode"] == 404:
