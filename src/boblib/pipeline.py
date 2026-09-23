@@ -181,6 +181,10 @@ class PipelineProtocolRun(PipelineBase[ProtocolRunRecord]):
     def finish(self) -> None:
         self.completed = True
 
+    def ensure_local_files(self, s3: S3Manager, dst: Path) -> None:
+        for sample in self.samples:
+            sample.ensure_local_files(s3, dst)
+
 
 def get_pipeline_protocol_runs(
     slims: Slims,
